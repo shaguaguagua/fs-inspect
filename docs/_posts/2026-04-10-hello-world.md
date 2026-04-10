@@ -4,6 +4,10 @@ title: "Hello, fs-inspect"
 date: 2026-04-10
 ---
 
+[中文](#zh) · [English](#en)
+
+<a id="zh"></a>
+
 开坑。目标很小也很具体：做一个 CLI，专门回答"当 FreeSWITCH 跑在不止一台机器上时"你每天都会遇到的那些问题。
 
 ## 为什么是现在
@@ -34,6 +38,8 @@ date: 2026-04-10
 下一篇大概率会写配置文件格式——`fs-inspect` 怎么知道集群里有哪些节点——因为那是第一个真正的设计决策，而我现在还没想清楚。
 
 ---
+
+<a id="en"></a>
 
 Starting a thing. The plan is small and specific: a CLI for the day-to-day questions you hit the moment you run FreeSWITCH on more than one box.
 

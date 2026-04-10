@@ -3,6 +3,10 @@ layout: home
 title: fs-inspect
 ---
 
+[中文](#zh) · [English](#en)
+
+<a id="zh"></a>
+
 **fs-inspect** 是一个面向多实例 FreeSWITCH 集群的现代化运维 CLI。
 
 官方的 `fs_cli` 一次只能连一台 FS。`fs-inspect` 站在一整个 FS 集群的上层，一条命令回答集群级别的问题：
@@ -17,6 +21,8 @@ title: fs-inspect
 - 协议：MIT
 
 ---
+
+<a id="en"></a>
 
 **fs-inspect** is a modern CLI for inspecting and operating multi-instance FreeSWITCH clusters.
 
