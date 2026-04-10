@@ -5,6 +5,7 @@
 //
 //	reg <ext>    find which node a SIP extension is registered on
 //	channels     list active channels across every node
+//	shell        interactive bubbletea-powered REPL
 //	probe        ad-hoc single-node ESL debug shell
 package main
 
@@ -19,7 +20,9 @@ import (
 
 	"github.com/shaguaguagua/fs-inspect/internal/cluster"
 	"github.com/shaguaguagua/fs-inspect/internal/config"
+	"github.com/shaguaguagua/fs-inspect/internal/display"
 	"github.com/shaguaguagua/fs-inspect/internal/esl"
+	"github.com/shaguaguagua/fs-inspect/internal/shell"
 )
 
 const defaultConfigPath = "fs-inspect.yaml"
@@ -34,6 +37,8 @@ func main() {
 		regCmd(os.Args[2:])
 	case "channels":
 		channelsCmd(os.Args[2:])
+	case "shell":
+		shellCmd(os.Args[2:])
 	case "probe":
 		probeCmd(os.Args[2:])
 	case "help", "-h", "--help":
@@ -54,6 +59,7 @@ Usage:
 Commands:
   reg <ext>    Find which node a SIP extension is registered on
   channels     List active channels across every node in the cluster
+  shell        Launch the interactive multi-node shell (bubbletea)
   probe        Ad-hoc single-node ESL debug shell
 
 Run 'fs-inspect <command> -h' for command-specific flags.`)
@@ -79,26 +85,54 @@ func regCmd(args []string) {
 	}
 
 	results := cluster.Query(cfg, "show registrations as json")
+	fmt.Print(RenderReg(ext, results))
 
+	found := false
+	for _, r := range results {
+		if r.Err != nil {
+			continue
+		}
+		for _, row := range parseRows(r.Body) {
+			if row["reg_user"] == ext {
+				found = true
+			}
+		}
+	}
+	if !found {
+		os.Exit(1)
+	}
+}
+
+// RenderReg builds the user-facing output for a reg lookup. Extracted so
+// the interactive shell can reuse it without reaching into stdout.
+func RenderReg(ext string, results []cluster.Result) string {
+	var b strings.Builder
 	found := 0
 	for _, r := range results {
 		if r.Err != nil {
-			fmt.Fprintf(os.Stderr, "✗ %-12s %-20s  ERROR  %v\n", r.Node.Name, r.Node.Addr, r.Err)
+			fmt.Fprintf(&b, "%s %-12s %-20s  %s  %v\n",
+				display.Red("✗"), display.Cyan(r.Node.Name), r.Node.Addr, display.Red("ERROR"), r.Err)
 			continue
 		}
 		for _, row := range parseRows(r.Body) {
 			if row["reg_user"] != ext {
 				continue
 			}
-			fmt.Printf("✓ %-12s %-20s  user=%s  contact=%s:%s  (%s)\n",
-				r.Node.Name, r.Node.Addr, row["reg_user"], row["network_ip"], row["network_port"], r.Elapsed.Round(time.Millisecond))
+			fmt.Fprintf(&b, "%s %s %-20s  user=%s  contact=%s  %s\n",
+				display.Green("✓"),
+				display.Cyan(fmt.Sprintf("%-12s", r.Node.Name)),
+				r.Node.Addr,
+				display.Bold(row["reg_user"]),
+				display.Yellow(row["network_ip"]+":"+row["network_port"]),
+				display.Gray("("+r.Elapsed.Round(time.Millisecond).String()+")"),
+			)
 			found++
 		}
 	}
 	if found == 0 {
-		fmt.Printf("extension %s not registered on any known node\n", ext)
-		os.Exit(1)
+		fmt.Fprintf(&b, "extension %s not registered on any known node\n", display.Bold(ext))
 	}
+	return b.String()
 }
 
 func channelsCmd(args []string) {
@@ -112,15 +146,23 @@ func channelsCmd(args []string) {
 	}
 
 	results := cluster.Query(cfg, "show channels as json")
+	fmt.Print(RenderChannels(cfg, results))
+}
 
-	fmt.Printf("%-12s %-10s %-15s  %-15s %-9s %s\n", "NODE", "STATE", "CALLER", "CALLEE", "DUR", "UUID")
-	fmt.Println(strings.Repeat("─", 78))
+// RenderChannels builds the user-facing output for a channels listing.
+func RenderChannels(cfg *config.Config, results []cluster.Result) string {
+	var b strings.Builder
+	header := fmt.Sprintf("%-12s %-10s %-15s  %-15s %-9s %s",
+		"NODE", "STATE", "CALLER", "CALLEE", "DUR", "UUID")
+	fmt.Fprintln(&b, display.Bold(header))
+	fmt.Fprintln(&b, display.Gray(strings.Repeat("─", 78)))
 
 	now := time.Now().Unix()
 	total := 0
 	for _, r := range results {
 		if r.Err != nil {
-			fmt.Fprintf(os.Stderr, "✗ %-12s ERROR  %v\n", r.Node.Name, r.Err)
+			fmt.Fprintf(&b, "%s %s  %s  %v\n",
+				display.Red("✗"), display.Cyan(fmt.Sprintf("%-12s", r.Node.Name)), display.Red("ERROR"), r.Err)
 			continue
 		}
 		for _, row := range parseRows(r.Body) {
@@ -133,18 +175,55 @@ func channelsCmd(args []string) {
 			if len(uuid) > 8 {
 				uuid = uuid[:8]
 			}
-			fmt.Printf("%-12s %-10s %-15s  %-15s %-9s %s\n",
-				r.Node.Name,
-				truncate(row["state"], 10),
-				truncate(row["cid_num"], 15),
-				truncate(row["dest"], 15),
-				dur,
-				uuid,
+			fmt.Fprintf(&b, "%s %s %s  %s %s %s\n",
+				display.Cyan(fmt.Sprintf("%-12s", r.Node.Name)),
+				colorizeState(truncate(row["state"], 10)),
+				fmt.Sprintf("%-15s", truncate(row["cid_num"], 15)),
+				fmt.Sprintf("%-15s", truncate(row["dest"], 15)),
+				display.Gray(fmt.Sprintf("%-9s", dur)),
+				display.Dim(uuid),
 			)
 			total++
 		}
 	}
-	fmt.Printf("\n%d active channel(s) across %d node(s)\n", total, len(cfg.Nodes))
+	fmt.Fprintf(&b, "\n%s active channel(s) across %s node(s)\n",
+		display.Bold(strconv.Itoa(total)), display.Bold(strconv.Itoa(len(cfg.Nodes))))
+	return b.String()
+}
+
+// colorizeState maps common FreeSWITCH channel states to colors so the
+// table tells you at a glance what each call is doing.
+func colorizeState(state string) string {
+	padded := fmt.Sprintf("%-10s", state)
+	switch strings.ToUpper(strings.TrimSpace(state)) {
+	case "CS_EXECUTE", "CS_ROUTING", "ACTIVE":
+		return display.Green(padded)
+	case "CS_NEW", "CS_INIT", "CS_CONSUME_MEDIA", "EARLY":
+		return display.Yellow(padded)
+	case "CS_HANGUP", "CS_DESTROY", "CS_REPORTING", "HANGUP":
+		return display.Red(padded)
+	default:
+		return padded
+	}
+}
+
+func shellCmd(args []string) {
+	fs := flag.NewFlagSet("shell", flag.ExitOnError)
+	configPath := fs.String("config", defaultConfigPath, "path to fs-inspect.yaml")
+	_ = fs.Parse(args)
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		fail(err)
+	}
+
+	if err := shell.Run(cfg, shell.Handlers{
+		Reg:      RenderReg,
+		Channels: RenderChannels,
+		Probe:    probeAPI,
+	}); err != nil {
+		fail(err)
+	}
 }
 
 func probeCmd(args []string) {
@@ -154,23 +233,27 @@ func probeCmd(args []string) {
 	cmd := fs.String("cmd", "show channels as json", "FS API command to run")
 	_ = fs.Parse(args)
 
-	client, err := esl.Dial(*addr, *password)
+	body, err := probeAPI(*addr, *password, *cmd)
 	if err != nil {
 		fail(err)
+	}
+	fmt.Println(display.PrettyJSON(body))
+}
+
+// probeAPI is the reusable half of probeCmd: dial, run one API command,
+// return the body. The shell uses it for raw-command mode.
+func probeAPI(addr, password, cmd string) (string, error) {
+	client, err := esl.Dial(addr, password)
+	if err != nil {
+		return "", err
 	}
 	defer client.Close()
-
-	body, err := client.API(*cmd)
-	if err != nil {
-		fail(err)
-	}
-	fmt.Print(body)
+	return client.API(cmd)
 }
 
 // parseRows unwraps the {row_count, rows:[...]} envelope that FreeSWITCH
 // returns from `show <thing> as json`. An unparseable body is treated as
-// "no rows" — callers already know which node produced it and can decide
-// whether to surface the parse failure as an error.
+// "no rows" — callers already know which node produced it.
 func parseRows(body string) []map[string]string {
 	body = strings.TrimSpace(body)
 	if body == "" {
@@ -193,6 +276,6 @@ func truncate(s string, n int) string {
 }
 
 func fail(err error) {
-	fmt.Fprintln(os.Stderr, "error:", err)
+	fmt.Fprintln(os.Stderr, display.Red("error:"), err)
 	os.Exit(1)
 }
