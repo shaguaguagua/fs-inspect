@@ -1,0 +1,14 @@
+title: fs-inspect
+description: A modern CLI for inspecting multi-instance FreeSWITCH clusters. Build log and docs.
+theme: minima
+author: shaguaguagua
+
+header_pages:
+  - index.md
+
+minima:
+  skin: auto
+
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
