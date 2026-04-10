@@ -44,6 +44,19 @@ $ fs-inspect tail
 17:22:53 fs-test      CHANNEL_HANGUP_COMPLETE   0000000000 → 9999              9a9f9508
 ```
 
+`nodes` 给出一张集群健康表，含版本、uptime、会话数和每节点的探测延迟。失败节点（拨号失败、密码错、超时等）会显式标红并打印错误摘要：
+
+```
+$ fs-inspect nodes
+NAME         STATUS   ADDR                   VERSION    UPTIME       CH    LATENCY
+──────────────────────────────────────────────────────────────────────────────────
+fs-test      ✓ up     127.0.0.1:18021        1.10.12    38m 2s       0     2ms
+fs-dead      ✗ down   127.0.0.1:19999        -          -            -     dial tcp 127.0.0.1:19999: connect: connection refused
+fs-bad-auth  ✗ down   127.0.0.1:18021        -          -            -     Invalid password
+
+1/3 node(s) up
+```
+
 多节点环境下每一行前面的 `NODE` 列会混合多台不同的 FS 名称——这正是 `fs-inspect` 存在的意义。
 
 ### 项目状态
@@ -61,10 +74,10 @@ $ fs-inspect tail
 ```
 fs-inspect reg 8001              # 这个分机现在注册在哪台？           ✓ 已实现
 fs-inspect channels              # 跨节点列出所有活跃通道              ✓ 已实现
+fs-inspect nodes                 # 集群健康表（版本/uptime/会话数）     ✓ 已实现
 fs-inspect tail                  # 跨节点实时合并 ESL 事件流            ✓ 已实现
 fs-inspect shell                 # bubbletea 交互式多节点 shell        ✓ 已实现
 fs-inspect probe                 # 单节点 ESL 调试（JSON 高亮）        ✓ 已实现
-fs-inspect node ls               # 列出已知 FS 实例 + 健康状态          Roadmap
 ```
 
 所有命令的输出都走 ANSI 彩色，支持 `NO_COLOR` 环境变量，管道/重定向时自动降级到纯文本。
@@ -124,6 +137,19 @@ $ fs-inspect tail
 17:22:53 fs-test      CHANNEL_HANGUP_COMPLETE   0000000000 → 9999              9a9f9508
 ```
 
+`nodes` renders a cluster health table showing version, uptime, session count and probe latency per node. Unreachable nodes (dial failure, bad password, timeout) are flagged red with a short error summary:
+
+```
+$ fs-inspect nodes
+NAME         STATUS   ADDR                   VERSION    UPTIME       CH    LATENCY
+──────────────────────────────────────────────────────────────────────────────────
+fs-test      ✓ up     127.0.0.1:18021        1.10.12    38m 2s       0     2ms
+fs-dead      ✗ down   127.0.0.1:19999        -          -            -     dial tcp 127.0.0.1:19999: connect: connection refused
+fs-bad-auth  ✗ down   127.0.0.1:18021        -          -            -     Invalid password
+
+1/3 node(s) up
+```
+
 On a multi-node deployment the `NODE` column fills with different FS names — which is the whole point of this tool existing.
 
 ### Status
@@ -141,10 +167,10 @@ Running FreeSWITCH in a single-node topology is solved. Running it as a horizont
 ```
 fs-inspect reg 8001              # where is this extension registered?     ✓ shipped
 fs-inspect channels              # active channels across all nodes        ✓ shipped
+fs-inspect nodes                 # cluster health table (version/up/chan)  ✓ shipped
 fs-inspect tail                  # merged live ESL event stream            ✓ shipped
 fs-inspect shell                 # interactive multi-node bubbletea shell  ✓ shipped
 fs-inspect probe                 # single-node ESL debug (JSON highlight)  ✓ shipped
-fs-inspect node ls               # list known FS instances + health        roadmap
 ```
 
 All output is ANSI-colorized, respects `NO_COLOR`, and auto-degrades to plain text when piped or redirected.

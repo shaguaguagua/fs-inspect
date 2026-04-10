@@ -5,6 +5,7 @@
 //
 //	reg <ext>    find which node a SIP extension is registered on
 //	channels     list active channels across every node
+//	nodes        cluster-wide health / version / uptime table
 //	tail         merged live ESL event stream from every node
 //	shell        interactive bubbletea-powered REPL
 //	probe        ad-hoc single-node ESL debug shell
@@ -41,6 +42,8 @@ func main() {
 		regCmd(os.Args[2:])
 	case "channels":
 		channelsCmd(os.Args[2:])
+	case "nodes":
+		nodesCmd(os.Args[2:])
 	case "tail":
 		tailCmd(os.Args[2:])
 	case "shell":
@@ -65,6 +68,7 @@ Usage:
 Commands:
   reg <ext>    Find which node a SIP extension is registered on
   channels     List active channels across every node in the cluster
+  nodes        Cluster-wide health: status, version, uptime, sessions
   tail         Stream merged ESL events from every node
   shell        Launch the interactive multi-node shell (bubbletea)
   probe        Ad-hoc single-node ESL debug shell
@@ -280,6 +284,152 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n]
+}
+
+func nodesCmd(args []string) {
+	fs := flag.NewFlagSet("nodes", flag.ExitOnError)
+	configPath := fs.String("config", defaultConfigPath, "path to fs-inspect.yaml")
+	_ = fs.Parse(args)
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		fail(err)
+	}
+
+	results := cluster.Query(cfg, "status")
+
+	header := fmt.Sprintf("%-12s %-8s %-22s %-10s %-12s %-5s %s",
+		"NAME", "STATUS", "ADDR", "VERSION", "UPTIME", "CH", "LATENCY")
+	fmt.Println(display.Bold(header))
+	fmt.Println(display.Gray(strings.Repeat("─", 82)))
+
+	up := 0
+	for _, r := range results {
+		if r.Err != nil {
+			fmt.Printf("%-12s %s %-22s %-10s %-12s %-5s %s\n",
+				display.Cyan(r.Node.Name),
+				display.Red("✗ down "),
+				r.Node.Addr,
+				display.Gray("-"),
+				display.Gray("-"),
+				display.Gray("-"),
+				display.Red(shortErr(r.Err)),
+			)
+			continue
+		}
+		version := parseStatusVersion(r.Body)
+		uptime := parseStatusUptime(r.Body)
+		sessions := parseStatusSessions(r.Body)
+		latency := r.Elapsed.Round(time.Millisecond).String()
+		fmt.Printf("%-12s %s %-22s %-10s %-12s %-5s %s\n",
+			display.Cyan(r.Node.Name),
+			display.Green("✓ up   "),
+			r.Node.Addr,
+			display.Yellow(version),
+			uptime,
+			sessions,
+			display.Gray(latency),
+		)
+		up++
+	}
+	fmt.Printf("\n%s/%s node(s) up\n",
+		display.Bold(strconv.Itoa(up)),
+		display.Bold(strconv.Itoa(len(cfg.Nodes))))
+}
+
+// parseStatusVersion pulls the X.Y.Z number out of the "FreeSWITCH
+// (Version 1.10.12 -release-...) is ready" line.
+func parseStatusVersion(status string) string {
+	const marker = "FreeSWITCH (Version "
+	idx := strings.Index(status, marker)
+	if idx < 0 {
+		return "-"
+	}
+	rest := status[idx+len(marker):]
+	end := strings.IndexAny(rest, " \n")
+	if end < 0 {
+		return "-"
+	}
+	return rest[:end]
+}
+
+// parseStatusUptime parses the "UP 0 years, 0 days, 0 hours, 35 minutes,
+// 54 seconds, ..." preamble and compresses it into one of:
+//
+//	7d 14h   |   5h 12m   |   35m 54s   |   42s
+//
+// so it fits in a table cell.
+func parseStatusUptime(status string) string {
+	const marker = "UP "
+	idx := strings.Index(status, marker)
+	if idx < 0 {
+		return "-"
+	}
+	rest := status[idx+len(marker):]
+	end := strings.Index(rest, "\n")
+	if end < 0 {
+		return "-"
+	}
+	raw := rest[:end]
+
+	var years, days, hours, minutes, seconds int
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		var n int
+		if _, err := fmt.Sscanf(part, "%d", &n); err != nil {
+			continue
+		}
+		switch {
+		case strings.Contains(part, "year"):
+			years = n
+		case strings.Contains(part, "day"):
+			days = n
+		case strings.Contains(part, "hour"):
+			hours = n
+		case strings.Contains(part, "minute"):
+			minutes = n
+		case strings.Contains(part, "second") &&
+			!strings.Contains(part, "millisecond") &&
+			!strings.Contains(part, "microsecond"):
+			seconds = n
+		}
+	}
+	switch {
+	case years > 0:
+		return fmt.Sprintf("%dy %dd", years, days)
+	case days > 0:
+		return fmt.Sprintf("%dd %dh", days, hours)
+	case hours > 0:
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	case minutes > 0:
+		return fmt.Sprintf("%dm %ds", minutes, seconds)
+	default:
+		return fmt.Sprintf("%ds", seconds)
+	}
+}
+
+// parseStatusSessions scans status output for the "N session(s) - peak M"
+// line and returns N as a string, or "-" if the line is missing.
+func parseStatusSessions(status string) string {
+	for _, line := range strings.Split(status, "\n") {
+		if strings.Contains(line, "session(s) - peak") {
+			var n int
+			if _, err := fmt.Sscanf(line, "%d session(s)", &n); err == nil {
+				return strconv.Itoa(n)
+			}
+		}
+	}
+	return "-"
+}
+
+// shortErr flattens common dial errors into a single short phrase so
+// they fit in the nodes table without wrapping.
+func shortErr(err error) string {
+	msg := err.Error()
+	if i := strings.Index(msg, ": "); i >= 0 && i < len(msg)-2 {
+		return msg[i+2:]
+	}
+	return msg
 }
 
 func tailCmd(args []string) {
