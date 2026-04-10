@@ -4,6 +4,7 @@
 // Commands:
 //
 //	reg <ext>    find which node a SIP extension is registered on
+//	channels     list active channels across every node
 //	probe        ad-hoc single-node ESL debug shell
 package main
 
@@ -12,7 +13,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/shaguaguagua/fs-inspect/internal/cluster"
 	"github.com/shaguaguagua/fs-inspect/internal/config"
@@ -29,6 +32,8 @@ func main() {
 	switch os.Args[1] {
 	case "reg":
 		regCmd(os.Args[2:])
+	case "channels":
+		channelsCmd(os.Args[2:])
 	case "probe":
 		probeCmd(os.Args[2:])
 	case "help", "-h", "--help":
@@ -48,6 +53,7 @@ Usage:
 
 Commands:
   reg <ext>    Find which node a SIP extension is registered on
+  channels     List active channels across every node in the cluster
   probe        Ad-hoc single-node ESL debug shell
 
 Run 'fs-inspect <command> -h' for command-specific flags.`)
@@ -80,10 +86,12 @@ func regCmd(args []string) {
 			fmt.Fprintf(os.Stderr, "✗ %-12s %-20s  ERROR  %v\n", r.Node.Name, r.Node.Addr, r.Err)
 			continue
 		}
-		hits := filterRegistrations(r.Body, ext)
-		for _, h := range hits {
+		for _, row := range parseRows(r.Body) {
+			if row["reg_user"] != ext {
+				continue
+			}
 			fmt.Printf("✓ %-12s %-20s  user=%s  contact=%s:%s  (%s)\n",
-				r.Node.Name, r.Node.Addr, h["reg_user"], h["network_ip"], h["network_port"], r.Elapsed.Round(1e6))
+				r.Node.Name, r.Node.Addr, row["reg_user"], row["network_ip"], row["network_port"], r.Elapsed.Round(time.Millisecond))
 			found++
 		}
 	}
@@ -93,29 +101,50 @@ func regCmd(args []string) {
 	}
 }
 
-// filterRegistrations parses the body of "show registrations as json" and
-// returns rows whose reg_user equals ext. An unparseable body (empty,
-// plain-text error, etc.) is treated as "no hits" rather than a hard error,
-// because the caller already knows which node produced it.
-func filterRegistrations(body, ext string) []map[string]string {
-	body = strings.TrimSpace(body)
-	if body == "" {
-		return nil
+func channelsCmd(args []string) {
+	fs := flag.NewFlagSet("channels", flag.ExitOnError)
+	configPath := fs.String("config", defaultConfigPath, "path to fs-inspect.yaml")
+	_ = fs.Parse(args)
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		fail(err)
 	}
-	var payload struct {
-		RowCount int                 `json:"row_count"`
-		Rows     []map[string]string `json:"rows"`
-	}
-	if err := json.Unmarshal([]byte(body), &payload); err != nil {
-		return nil
-	}
-	var out []map[string]string
-	for _, row := range payload.Rows {
-		if row["reg_user"] == ext {
-			out = append(out, row)
+
+	results := cluster.Query(cfg, "show channels as json")
+
+	fmt.Printf("%-12s %-10s %-15s  %-15s %-9s %s\n", "NODE", "STATE", "CALLER", "CALLEE", "DUR", "UUID")
+	fmt.Println(strings.Repeat("─", 78))
+
+	now := time.Now().Unix()
+	total := 0
+	for _, r := range results {
+		if r.Err != nil {
+			fmt.Fprintf(os.Stderr, "✗ %-12s ERROR  %v\n", r.Node.Name, r.Err)
+			continue
+		}
+		for _, row := range parseRows(r.Body) {
+			created, _ := strconv.ParseInt(row["created_epoch"], 10, 64)
+			dur := time.Duration(0)
+			if created > 0 {
+				dur = time.Duration(now-created) * time.Second
+			}
+			uuid := row["uuid"]
+			if len(uuid) > 8 {
+				uuid = uuid[:8]
+			}
+			fmt.Printf("%-12s %-10s %-15s  %-15s %-9s %s\n",
+				r.Node.Name,
+				truncate(row["state"], 10),
+				truncate(row["cid_num"], 15),
+				truncate(row["dest"], 15),
+				dur,
+				uuid,
+			)
+			total++
 		}
 	}
-	return out
+	fmt.Printf("\n%d active channel(s) across %d node(s)\n", total, len(cfg.Nodes))
 }
 
 func probeCmd(args []string) {
@@ -136,6 +165,31 @@ func probeCmd(args []string) {
 		fail(err)
 	}
 	fmt.Print(body)
+}
+
+// parseRows unwraps the {row_count, rows:[...]} envelope that FreeSWITCH
+// returns from `show <thing> as json`. An unparseable body is treated as
+// "no rows" — callers already know which node produced it and can decide
+// whether to surface the parse failure as an error.
+func parseRows(body string) []map[string]string {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return nil
+	}
+	var payload struct {
+		Rows []map[string]string `json:"rows"`
+	}
+	if err := json.Unmarshal([]byte(body), &payload); err != nil {
+		return nil
+	}
+	return payload.Rows
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
 }
 
 func fail(err error) {
