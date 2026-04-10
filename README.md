@@ -43,20 +43,27 @@ extension 9999 not registered on any known node
 
 `fs-inspect` 就是我自己搭这种集群时，想要却没有的工具。
 
-### 规划中的命令
+### 命令
 
 ```
-fs-inspect reg 8001              # 这个分机现在注册在哪台？
-fs-inspect channels              # 跨节点列出所有活跃通道
-fs-inspect node ls               # 列出已知 FS 实例 + 健康状态
-fs-inspect tail                  # 跨节点实时合并事件流
+fs-inspect reg 8001              # 这个分机现在注册在哪台？           ✓ 已实现
+fs-inspect channels              # 跨节点列出所有活跃通道              ✓ 已实现
+fs-inspect shell                 # bubbletea 交互式多节点 shell        ✓ 已实现
+fs-inspect probe                 # 单节点 ESL 调试（JSON 高亮）        ✓ 已实现
+fs-inspect node ls               # 列出已知 FS 实例 + 健康状态          Roadmap
+fs-inspect tail                  # 跨节点实时合并事件流                Roadmap
 ```
+
+所有命令的输出都走 ANSI 彩色，支持 `NO_COLOR` 环境变量，管道/重定向时自动降级到纯文本。
 
 ### 技术栈
 
 - Go
-- [fiorix/go-eventsocket](https://github.com/fiorix/go-eventsocket) 处理 ESL
-- [charmbracelet/bubbletea](https://github.com/charmbracelet/bubbletea) 处理 TUI
+- [fiorix/go-eventsocket](https://github.com/fiorix/go-eventsocket) —— ESL 客户端
+- [gopkg.in/yaml.v3](https://gopkg.in/yaml.v3) —— 配置文件解析
+- [charmbracelet/bubbletea](https://github.com/charmbracelet/bubbletea) + [bubbles](https://github.com/charmbracelet/bubbles) + [lipgloss](https://github.com/charmbracelet/lipgloss) —— 交互式 shell
+- [alecthomas/chroma/v2](https://github.com/alecthomas/chroma) —— JSON 语法高亮
+- [golang.org/x/term](https://pkg.go.dev/golang.org/x/term) —— TTY 检测
 
 ### 协议
 
@@ -103,20 +110,27 @@ Running FreeSWITCH in a single-node topology is solved. Running it as a horizont
 
 `fs-inspect` is the tool I wanted while building exactly that kind of cluster.
 
-### Planned commands
+### Commands
 
 ```
-fs-inspect reg 8001              # where is this extension registered?
-fs-inspect channels              # active channels across all nodes
-fs-inspect node ls               # list known FS instances + health
-fs-inspect tail                  # live-tail events cluster-wide
+fs-inspect reg 8001              # where is this extension registered?  ✓ shipped
+fs-inspect channels              # active channels across all nodes     ✓ shipped
+fs-inspect shell                 # interactive multi-node bubbletea shell ✓ shipped
+fs-inspect probe                 # single-node ESL debug (JSON highlight) ✓ shipped
+fs-inspect node ls               # list known FS instances + health     roadmap
+fs-inspect tail                  # live-tail events cluster-wide        roadmap
 ```
+
+All output is ANSI-colorized, respects `NO_COLOR`, and auto-degrades to plain text when piped or redirected.
 
 ### Stack
 
 - Go
-- [fiorix/go-eventsocket](https://github.com/fiorix/go-eventsocket) for ESL
-- [charmbracelet/bubbletea](https://github.com/charmbracelet/bubbletea) for TUI
+- [fiorix/go-eventsocket](https://github.com/fiorix/go-eventsocket) — ESL client
+- [gopkg.in/yaml.v3](https://gopkg.in/yaml.v3) — config file parsing
+- [charmbracelet/bubbletea](https://github.com/charmbracelet/bubbletea) + [bubbles](https://github.com/charmbracelet/bubbles) + [lipgloss](https://github.com/charmbracelet/lipgloss) — interactive shell
+- [alecthomas/chroma/v2](https://github.com/alecthomas/chroma) — JSON syntax highlighting
+- [golang.org/x/term](https://pkg.go.dev/golang.org/x/term) — TTY detection
 
 ### License
 
