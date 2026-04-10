@@ -5,6 +5,7 @@
 //
 //	reg <ext>    find which node a SIP extension is registered on
 //	channels     list active channels across every node
+//	tail         merged live ESL event stream from every node
 //	shell        interactive bubbletea-powered REPL
 //	probe        ad-hoc single-node ESL debug shell
 package main
@@ -14,8 +15,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/shaguaguagua/fs-inspect/internal/cluster"
@@ -23,6 +26,7 @@ import (
 	"github.com/shaguaguagua/fs-inspect/internal/display"
 	"github.com/shaguaguagua/fs-inspect/internal/esl"
 	"github.com/shaguaguagua/fs-inspect/internal/shell"
+	"github.com/shaguaguagua/fs-inspect/internal/tail"
 )
 
 const defaultConfigPath = "fs-inspect.yaml"
@@ -37,6 +41,8 @@ func main() {
 		regCmd(os.Args[2:])
 	case "channels":
 		channelsCmd(os.Args[2:])
+	case "tail":
+		tailCmd(os.Args[2:])
 	case "shell":
 		shellCmd(os.Args[2:])
 	case "probe":
@@ -59,6 +65,7 @@ Usage:
 Commands:
   reg <ext>    Find which node a SIP extension is registered on
   channels     List active channels across every node in the cluster
+  tail         Stream merged ESL events from every node
   shell        Launch the interactive multi-node shell (bubbletea)
   probe        Ad-hoc single-node ESL debug shell
 
@@ -273,6 +280,91 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n]
+}
+
+func tailCmd(args []string) {
+	fs := flag.NewFlagSet("tail", flag.ExitOnError)
+	configPath := fs.String("config", defaultConfigPath, "path to fs-inspect.yaml")
+	events := fs.String("events", "CHANNEL_CREATE CHANNEL_ANSWER CHANNEL_HANGUP_COMPLETE",
+		"space-separated ESL event names to subscribe to; use 'ALL' for every event")
+	_ = fs.Parse(args)
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		fail(err)
+	}
+
+	ch, stop := tail.Subscribe(cfg, *events)
+	defer stop()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	fmt.Printf("%s tailing %s node(s) for events: %s\n",
+		display.Bold(display.Cyan("›")), display.Bold(strconv.Itoa(len(cfg.Nodes))), display.Yellow(*events))
+	fmt.Printf("%s press Ctrl+C to exit\n\n", display.Gray("›"))
+
+	for {
+		select {
+		case <-sigCh:
+			fmt.Println(display.Gray("\n(stopped)"))
+			return
+		case ev, ok := <-ch:
+			if !ok {
+				return
+			}
+			fmt.Println(formatTailEvent(ev))
+		}
+	}
+}
+
+// formatTailEvent renders one tail.Event as a single terminal line.
+// Shape: HH:MM:SS  node  EVENT_NAME  caller → callee  uuid
+func formatTailEvent(ev tail.Event) string {
+	if ev.Err != nil {
+		return fmt.Sprintf("%s %s %s %s",
+			display.Gray(ev.Time.Format("15:04:05")),
+			display.Cyan(fmt.Sprintf("%-12s", ev.Node.Name)),
+			display.Red("✗"),
+			display.Red(ev.Err.Error()),
+		)
+	}
+
+	uuid := ev.Get("Unique-Id")
+	if len(uuid) > 8 {
+		uuid = uuid[:8]
+	}
+	caller := ev.Get("Caller-Caller-Id-Number")
+	dest := ev.Get("Caller-Destination-Number")
+	legs := caller + " → " + dest
+	if caller == "" && dest == "" {
+		legs = ""
+	}
+
+	return fmt.Sprintf("%s %s %s  %-30s %s",
+		display.Gray(ev.Time.Format("15:04:05")),
+		display.Cyan(fmt.Sprintf("%-12s", ev.Node.Name)),
+		colorizeEventName(ev.Name),
+		legs,
+		display.Dim(uuid),
+	)
+}
+
+// colorizeEventName maps common call-lifecycle events to colors so you
+// can eyeball call flow at a glance: green for a new channel, yellow
+// when it answers, red when it hangs up.
+func colorizeEventName(name string) string {
+	padded := fmt.Sprintf("%-24s", name)
+	switch name {
+	case "CHANNEL_CREATE":
+		return display.Green(padded)
+	case "CHANNEL_ANSWER":
+		return display.Yellow(padded)
+	case "CHANNEL_HANGUP", "CHANNEL_HANGUP_COMPLETE", "CHANNEL_DESTROY":
+		return display.Red(padded)
+	default:
+		return display.Magenta(padded)
+	}
 }
 
 func fail(err error) {

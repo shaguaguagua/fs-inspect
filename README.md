@@ -31,6 +31,19 @@ $ fs-inspect reg 9999
 extension 9999 not registered on any known node
 ```
 
+`tail` 子命令跨节点合并实时 ESL 事件流（下面是真机抓到的一次 loopback 测试呼叫，颜色在真终端里是绿/黄/红，重定向时自动降级为纯文本）：
+
+```
+$ fs-inspect tail
+› tailing 1 node(s) for events: CHANNEL_CREATE CHANNEL_ANSWER CHANNEL_HANGUP_COMPLETE
+› press Ctrl+C to exit
+
+17:22:42 fs-test      CHANNEL_CREATE            0000000000 → 9999              9a9f9508
+17:22:42 fs-test      CHANNEL_CREATE            0000000000 → 9999              ea2fbafc
+17:22:53 fs-test      CHANNEL_HANGUP_COMPLETE   0000000000 → 9999              ea2fbafc
+17:22:53 fs-test      CHANNEL_HANGUP_COMPLETE   0000000000 → 9999              9a9f9508
+```
+
 多节点环境下每一行前面的 `NODE` 列会混合多台不同的 FS 名称——这正是 `fs-inspect` 存在的意义。
 
 ### 项目状态
@@ -48,10 +61,10 @@ extension 9999 not registered on any known node
 ```
 fs-inspect reg 8001              # 这个分机现在注册在哪台？           ✓ 已实现
 fs-inspect channels              # 跨节点列出所有活跃通道              ✓ 已实现
+fs-inspect tail                  # 跨节点实时合并 ESL 事件流            ✓ 已实现
 fs-inspect shell                 # bubbletea 交互式多节点 shell        ✓ 已实现
 fs-inspect probe                 # 单节点 ESL 调试（JSON 高亮）        ✓ 已实现
 fs-inspect node ls               # 列出已知 FS 实例 + 健康状态          Roadmap
-fs-inspect tail                  # 跨节点实时合并事件流                Roadmap
 ```
 
 所有命令的输出都走 ANSI 彩色，支持 `NO_COLOR` 环境变量，管道/重定向时自动降级到纯文本。
@@ -98,6 +111,19 @@ $ fs-inspect reg 9999
 extension 9999 not registered on any known node
 ```
 
+The `tail` subcommand merges live ESL event streams across every node (real-run output from a loopback test call below; colors in a real terminal are green/yellow/red, auto-stripped when redirected):
+
+```
+$ fs-inspect tail
+› tailing 1 node(s) for events: CHANNEL_CREATE CHANNEL_ANSWER CHANNEL_HANGUP_COMPLETE
+› press Ctrl+C to exit
+
+17:22:42 fs-test      CHANNEL_CREATE            0000000000 → 9999              9a9f9508
+17:22:42 fs-test      CHANNEL_CREATE            0000000000 → 9999              ea2fbafc
+17:22:53 fs-test      CHANNEL_HANGUP_COMPLETE   0000000000 → 9999              ea2fbafc
+17:22:53 fs-test      CHANNEL_HANGUP_COMPLETE   0000000000 → 9999              9a9f9508
+```
+
 On a multi-node deployment the `NODE` column fills with different FS names — which is the whole point of this tool existing.
 
 ### Status
@@ -113,12 +139,12 @@ Running FreeSWITCH in a single-node topology is solved. Running it as a horizont
 ### Commands
 
 ```
-fs-inspect reg 8001              # where is this extension registered?  ✓ shipped
-fs-inspect channels              # active channels across all nodes     ✓ shipped
-fs-inspect shell                 # interactive multi-node bubbletea shell ✓ shipped
-fs-inspect probe                 # single-node ESL debug (JSON highlight) ✓ shipped
-fs-inspect node ls               # list known FS instances + health     roadmap
-fs-inspect tail                  # live-tail events cluster-wide        roadmap
+fs-inspect reg 8001              # where is this extension registered?     ✓ shipped
+fs-inspect channels              # active channels across all nodes        ✓ shipped
+fs-inspect tail                  # merged live ESL event stream            ✓ shipped
+fs-inspect shell                 # interactive multi-node bubbletea shell  ✓ shipped
+fs-inspect probe                 # single-node ESL debug (JSON highlight)  ✓ shipped
+fs-inspect node ls               # list known FS instances + health        roadmap
 ```
 
 All output is ANSI-colorized, respects `NO_COLOR`, and auto-degrades to plain text when piped or redirected.
