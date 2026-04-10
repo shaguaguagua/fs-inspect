@@ -10,6 +10,29 @@
 
 `fs-inspect` 不是官方 `fs_cli` 的替代品。`fs_cli` 一次连一台 FS 执行命令；`fs-inspect` 站在一整个 FS 集群的上层，并行通过 ESL 查询每个实例并聚合结果，回答这一类问题：*"分机 8001 现在注册在哪台 FS 上？"*、*"把所有节点上的活跃通话都列出来"*、*"哪一台在漏 channel？"*。
 
+### Demo
+
+真机运行输出（单节点实验集群，FreeSWITCH 1.10.12）：
+
+```
+$ fs-inspect channels
+NODE         STATE      CALLER           CALLEE          DUR       UUID
+──────────────────────────────────────────────────────────────────────────────
+
+0 active channel(s) across 1 node(s)
+
+$ fs-inspect reg 1010
+✓ fs-test      127.0.0.1:8021        user=1010  contact=192.168.65.1:32249  (1ms)
+
+$ fs-inspect reg 1012
+✓ fs-test      127.0.0.1:8021        user=1012  contact=192.168.65.1:51826  (2ms)
+
+$ fs-inspect reg 9999
+extension 9999 not registered on any known node
+```
+
+多节点环境下每一行前面的 `NODE` 列会混合多台不同的 FS 名称——这正是 `fs-inspect` 存在的意义。
+
 ### 项目状态
 
 早期开发阶段。进展记录见 [Build Log 博客](https://shaguaguagua.github.io/fs-inspect/)。
@@ -46,6 +69,29 @@ MIT
 A modern CLI for inspecting and operating **multi-instance FreeSWITCH clusters**.
 
 `fs-inspect` is not a replacement for the official `fs_cli`. `fs_cli` connects to a single FS and runs commands against it. `fs-inspect` sits above a fleet: it answers questions like *"which FS is extension 8001 registered on right now?"*, *"show me every active call across the cluster"*, and *"which node is leaking channels?"* — by querying ESL across every instance in parallel and aggregating the result.
+
+### Demo
+
+Real output from a live run (single-node lab cluster, FreeSWITCH 1.10.12):
+
+```
+$ fs-inspect channels
+NODE         STATE      CALLER           CALLEE          DUR       UUID
+──────────────────────────────────────────────────────────────────────────────
+
+0 active channel(s) across 1 node(s)
+
+$ fs-inspect reg 1010
+✓ fs-test      127.0.0.1:8021        user=1010  contact=192.168.65.1:32249  (1ms)
+
+$ fs-inspect reg 1012
+✓ fs-test      127.0.0.1:8021        user=1012  contact=192.168.65.1:51826  (2ms)
+
+$ fs-inspect reg 9999
+extension 9999 not registered on any known node
+```
+
+On a multi-node deployment the `NODE` column fills with different FS names — which is the whole point of this tool existing.
 
 ### Status
 

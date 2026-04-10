@@ -1,5 +1,8 @@
 # Binaries
 /fs-inspect
+/fs-inspect-linux-*
+/fs-inspect-darwin-*
+/fs-inspect-windows-*
 /bin/
 /dist/
 
