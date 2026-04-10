@@ -48,21 +48,27 @@ func Run(cfg *config.Config, h Handlers) error {
 	ti.CharLimit = 256
 
 	vp := viewport.New(80, 20)
-	vp.SetContent(banner(cfg))
+	initial := banner(cfg)
+	vp.SetContent(initial)
 
 	m := model{
-		cfg:      cfg,
-		handlers: h,
-		input:    ti,
-		output:   vp,
-		history:  nil,
-		histIdx:  -1,
+		cfg:        cfg,
+		handlers:   h,
+		input:      ti,
+		output:     vp,
+		scrollback: initial,
+		histIdx:    0,
 	}
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	_, err := p.Run()
 	return err
 }
 
+// model holds all shell state. Note the scrollback field is a plain
+// string, not a strings.Builder: bubbletea passes the model by value
+// through Update and View, and strings.Builder's copyCheck panics the
+// moment a copied-by-value Builder is written to. A string field
+// concatenates cheaply enough at shell-session scale and is copy-safe.
 type model struct {
 	cfg      *config.Config
 	handlers Handlers
@@ -70,7 +76,7 @@ type model struct {
 	input  textinput.Model
 	output viewport.Model
 
-	scrollback strings.Builder
+	scrollback string
 	history    []string
 	histIdx    int
 	width      int
@@ -86,7 +92,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.output.Width = msg.Width - 2
 		m.output.Height = msg.Height - 4
-		m.output.SetContent(m.scrollback.String())
+		m.output.SetContent(m.scrollback)
 		m.output.GotoBottom()
 		m.input.Width = msg.Width - 4
 		return m, nil
@@ -141,7 +147,7 @@ func (m model) View() string {
 // appendCommand writes the user's command line into the scrollback as a
 // labelled prompt line so the transcript reads like a real shell.
 func (m *model) appendCommand(line string) {
-	m.scrollback.WriteString(display.Gray("› ") + line + "\n")
+	m.scrollback += display.Gray("› ") + line + "\n"
 }
 
 // appendOutput writes a chunk of command output into the scrollback.
@@ -149,8 +155,8 @@ func (m *model) appendOutput(s string) {
 	if !strings.HasSuffix(s, "\n") {
 		s += "\n"
 	}
-	m.scrollback.WriteString(s)
-	m.output.SetContent(m.scrollback.String())
+	m.scrollback += s
+	m.output.SetContent(m.scrollback)
 	m.output.GotoBottom()
 }
 
