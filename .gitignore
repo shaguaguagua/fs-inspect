@@ -19,3 +19,6 @@ coverage.*
 # Env
 .env
 .env.local
+
+# Local cluster inventory (never commit real ESL passwords)
+fs-inspect.yaml

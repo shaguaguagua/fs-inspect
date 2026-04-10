@@ -1,0 +1,19 @@
+# fs-inspect cluster inventory
+#
+# Copy this file to fs-inspect.yaml (the default path) and fill in your
+# nodes, or pass --config <path> to point at it explicitly.
+#
+# Each node is a FreeSWITCH instance reachable via inbound ESL. The
+# password defaults to "ClueCon" if omitted.
+
+nodes:
+  - name: fs-01
+    addr: 10.0.0.1:8021
+    password: ClueCon
+
+  - name: fs-02
+    addr: 10.0.0.2:8021
+    password: ClueCon
+
+  - name: fs-03
+    addr: 10.0.0.3:8021
