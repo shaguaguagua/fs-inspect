@@ -1,7 +1,8 @@
 title: fs-inspect
-description: A modern CLI for inspecting multi-instance FreeSWITCH clusters. Build log and docs.
+description: 面向多实例 FreeSWITCH 集群的现代化运维 CLI。A modern CLI for inspecting multi-instance FreeSWITCH clusters.
 theme: minima
 author: shaguaguagua
+lang: zh-CN
 
 header_pages:
   - index.md
