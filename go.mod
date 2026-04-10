@@ -1,4 +1,4 @@
-module github.com/zhentianyu/fs-inspect
+module github.com/shaguaguagua/fs-inspect
 
 go 1.26.2
 

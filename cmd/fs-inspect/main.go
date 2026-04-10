@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/zhentianyu/fs-inspect/internal/esl"
+	"github.com/shaguaguagua/fs-inspect/internal/esl"
 )
 
 func main() {
