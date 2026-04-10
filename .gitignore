@@ -1,0 +1,21 @@
+# Binaries
+/fs-inspect
+/bin/
+/dist/
+
+# Go
+*.exe
+*.test
+*.out
+*.prof
+coverage.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Env
+.env
+.env.local
